@@ -69,13 +69,15 @@ sectionRe = re.compile(r'/([iagrt])')
 sessionRe = re.compile(r'session=myarea:([A-Za-z0-9]+)')
 
 # Year to default to for event information if none is provided.
-defaultYear = '2014'
+defaultYear = '2015'
 
 # Base url for many FRC pages.
 frcUrl = 'http://www.usfirst.org/roboticsprograms/frc/'
 
 # Mapping of years to year-specific pages.
 regionalYears = {'default':frcUrl + 'regionalevents.aspx?id=430',
+                 '2014':'https://my.usfirst.org/myarea/index.lasso?' +
+                     'event_type=FRC&year=2014&archive=true',
                  '2013':'https://my.usfirst.org/myarea/index.lasso?' +
                      'event_type=FRC&year=2013&archive=true',
                  '2012':'https://my.usfirst.org/myarea/index.lasso?' +
@@ -93,11 +95,7 @@ regionalYears = {'default':frcUrl + 'regionalevents.aspx?id=430',
                  '2006':frcUrl + 'content.aspx?id=4188',
                  '2005':frcUrl + 'content.aspx?id=4388',}
 championshipYears = {'default':frcUrl + 'content.aspx?id=432',
-                     '2013':frcUrl + 'content.aspx?id=432',  # No page exists.
-                     '2012':frcUrl + 'content.aspx?id=432',  # No page exists.
-                     '2011':frcUrl + 'content.aspx?id=432',  # No page exists.
-                     '2010':frcUrl + 'content.aspx?id=432',  # No page exists.
-                     '2009':frcUrl + 'content.aspx?id=14716',
+                     '2009':frcUrl + 'content.aspx?id=14716',  # No special page exists from 2010 onwards.
                      '2008':frcUrl + 'content.aspx?id=11286',
                      '2007':frcUrl + 'content.aspx?id=6778',
                      '2006':frcUrl + 'content.aspx?id=4188',
@@ -117,16 +115,15 @@ documentsYears = {'default':frcUrl + 'competition-manual-and-related-documents',
 # Pre-compute the event list for the instructions page.
 eventList = json.load(open("events.json"))
 events = []
-for i in xrange(0, (len(eventList) + 1) / 2):
-  row = [eventList[i]['code'], eventList[i]['old_code'], eventList[i]['name']]
-  j = i + (len(eventList) + 1) / 2
-  if j < len(eventList):
-    row.append(eventList[j]['code'])
-    row.append(eventList[j]['old_code'])
-    row.append(eventList[j]['name'])
-  else:
-    row.append("")
-    row.append("")
+for i in xrange(0, (len(eventList) + 2) / 3):
+  row = [eventList[i]['code'], eventList[i]['name']]
+  j = i + (len(eventList) + 2) / 3
+  row.append(eventList[j]['code'])
+  row.append(eventList[j]['name'])
+  k = j + (len(eventList) + 2) / 3
+  if k < len(eventList):
+    row.append(eventList[k]['code'])
+    row.append(eventList[k]['name'])
   events.append(row)
 
 # Pre-compute the event code translation tables.
@@ -180,8 +177,12 @@ def GetTeamPageUrl(handler):
     return None
 
 def Redir(handler, url):
-  handler.response.out.write(
-      template.render('templates/redirect.html', { 'url' : url, }))
+  if 'my.usfirst.org/myarea' in url:
+    # FIRST is now checking the 'Referer' header for the string 'usfirst.org'.
+    handler.redirect('/usfirst.org?' + urllib.urlencode({ 'url' : url }))
+  else:
+    handler.response.out.write(
+        template.render('templates/redirect.html', { 'url' : url, }))
 
 class TeamPage(webapp.RequestHandler):
   """
@@ -538,10 +539,18 @@ class RobotsTxtPage(webapp.RequestHandler):
 
 class GetFRCSpyDump(webapp.RequestHandler):
   """
-  Gets the latest CSV dump from Chief Delpgi FRC-Spy (Twitter @FRCFMS data)
+  Gets the latest CSV dump from Chief Delphi FRC-Spy (Twitter @FRCFMS data)
   """
   def get(self):
     Redir(self, 'http://www.chiefdelphi.com/forums/frcspy.php?xml=csv')
+
+class ReferrerRedirectPage(webapp.RequestHandler):
+  """
+  Redirects to fool FIRST's referrer-based checking.
+  """
+  def get(self):
+    self.response.out.write(template.render(
+        'templates/redirect.html', { 'url' : self.request.get('url'), }))
 
 # The mapping of URLs to handlers. For some reason, regular expressions that
 # use parentheses (e.g. '(championship|cmp|c)') cause an error, so some
@@ -631,6 +640,7 @@ application = webapp.WSGIApplication([
     (r'/flushteams/?', FlushTeamsPage),
     (r'/scrapeteams/\d{4}/\d+/?', ScrapeTeamsPage),
     (r'/robots.txt', RobotsTxtPage),
+    (r'/usfirst.org', ReferrerRedirectPage),
     ('.*', InstructionPage),
   ],
   debug=True)
